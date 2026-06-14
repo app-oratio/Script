@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baixar imagens do Oratio</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #f7f7f7;
+      color: #222;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    textarea {
+      width: 100%;
+      height: 300px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 12px 18px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #status {
+      margin-top: 20px;
+      padding: 15px;
+      background: #fff;
+      border: 1px solid #ddd;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Baixar imagens do Oratio</h1>
+
+  <p>Cole abaixo o JSON no formato:</p>
+
+  <pre>[
+  {
+    "title": "São José",
+    "image": "https://site.com/imagem.jpg"
+  }
+]</pre>
+
+  <textarea id="jsonInput" placeholder="Cole seu JSON aqui"></textarea>
+
+  <button onclick="baixarImagens()">Baixar imagens</button>
+
+  <div id="status">Aguardando JSON...</div>
+
+  <script>
+    function limparNomeArquivo(nome) {
+      return nome
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function obterExtensao(url, contentType) {
+      const urlLimpa = url.split("?")[0].split("#")[0];
+      const match = urlLimpa.match(/\.(jpg|jpeg|png|webp|gif)$/i);
+
+      if (match) {
+        return "." + match[1].toLowerCase();
+      }
+
+      if (contentType) {
+        if (contentType.includes("png")) return ".png";
+        if (contentType.includes("webp")) return ".webp";
+        if (contentType.includes("gif")) return ".gif";
+        if (contentType.includes("jpeg")) return ".jpg";
+      }
+
+      return ".jpg";
+    }
+
+    function esperar(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function baixarImagens() {
+      const status = document.getElementById("status");
+      const texto = document.getElementById("jsonInput").value.trim();
+
+      if (!texto) {
+        status.textContent = "Cole o JSON primeiro.";
+        return;
+      }
+
+      let lista;
+
+      try {
+        lista = JSON.parse(texto);
+      } catch (e) {
+        status.textContent = "JSON inválido:\n\n" + e.message;
+        return;
+      }
+
+      if (!Array.isArray(lista)) {
+        status.textContent = "O JSON precisa ser uma lista, começando com [ e terminando com ].";
+        return;
+      }
+
+      let baixadas = 0;
+      let erros = 0;
+
+      for (let i = 0; i < lista.length; i++) {
+        const item = lista[i];
+        const titulo = item.title || ("imagem_" + (i + 1));
+        const url = item.image;
+
+        if (!url) {
+          erros++;
+          status.textContent = `Erro no item ${i + 1}/${lista.length}: campo "image" vazio.`;
+          await esperar(100);
+          continue;
+        }
+
+        status.textContent =
+          `Baixando ${i + 1}/${lista.length}\n\n` +
+          `${titulo}\n\n` +
+          `Baixadas: ${baixadas}\n` +
+          `Erros: ${erros}`;
+
+        try {
+          const resposta = await fetch(url);
+
+          if (!resposta.ok) {
+            throw new Error("HTTP " + resposta.status);
+          }
+
+          const blob = await resposta.blob();
+          const extensao = obterExtensao(url, blob.type);
+          const nomeArquivo = limparNomeArquivo(titulo) + extensao;
+
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = nomeArquivo;
+          document.body.appendChild(link);
+          link.click();
+
+          URL.revokeObjectURL(link.href);
+          link.remove();
+
+          baixadas++;
+        } catch (e) {
+          erros++;
+          console.error("Erro ao baixar:", titulo, url, e);
+        }
+
+        await esperar(100);
+      }
+
+      status.textContent =
+        `Concluído!\n\n` +
+        `Total: ${lista.length}\n` +
+        `Baixadas: ${baixadas}\n` +
+        `Erros: ${erros}`;
+    }
+  </script>
+
+</body>
+</html>
