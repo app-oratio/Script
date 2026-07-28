@@ -1,0 +1,72 @@
+name: Baixar JSONs do Oratio
+
+on:
+  workflow_dispatch:
+    inputs:
+      escopo:
+        description: "Quais fontes baixar"
+        required: true
+        default: "firebase"
+        type: choice
+        options:
+          - firebase
+          - all
+      tentativas:
+        description: "Tentativas por arquivo"
+        required: true
+        default: "4"
+      intervalo_minimo:
+        description: "Intervalo mínimo em segundos"
+        required: true
+        default: "2"
+      intervalo_maximo:
+        description: "Intervalo máximo em segundos"
+        required: true
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Obter repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Baixar e validar os JSONs
+        run: |
+          python scripts/baixar_jsons.py             --scope "${{ inputs.escopo }}"             --output downloads             --retries "${{ inputs.tentativas }}"             --min-delay "${{ inputs.intervalo_minimo }}"             --max-delay "${{ inputs.intervalo_maximo }}"             --batch-size 12             --batch-pause 25             --timeout 90
+
+      - name: Criar pacote ZIP
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          source = Path('downloads')
+          target = Path('oratio-jsons.zip')
+          with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(source.glob('*')):
+                  if path.is_file():
+                      zf.write(path, path.name)
+          print(f'ZIP criado: {target} ({target.stat().st_size} bytes)')
+          PY
+
+      - name: Publicar ZIP e relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oratio-jsons-${{ inputs.escopo }}
+          path: |
+            oratio-jsons.zip
+            downloads/_relatorio_download.json
+            downloads/_relatorio_download.csv
+          if-no-files-found: warn
+          retention-days: 30
