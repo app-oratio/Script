@@ -1,180 +1,586 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Baixar imagens do Oratio</title>
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Baixador dos JSONs do Oratio</title>
   <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f1e9;
+      --panel: #fffdf8;
+      --text: #26231d;
+      --muted: #6d675c;
+      --line: #d8d0c0;
+      --gold: #9a7428;
+      --gold-soft: #efe3c5;
+      --ok: #276749;
+      --error: #9b2c2c;
+      --warn: #8a5a00;
+      --shadow: 0 12px 34px rgba(38, 35, 29, .10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #171612;
+        --panel: #211f1a;
+        --text: #f6f1e7;
+        --muted: #bbb2a2;
+        --line: #484136;
+        --gold: #d7b668;
+        --gold-soft: #3a321f;
+        --ok: #68d391;
+        --error: #fc8181;
+        --warn: #f6c453;
+        --shadow: 0 12px 34px rgba(0, 0, 0, .28);
+      }
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
-      max-width: 900px;
-      margin: 30px auto;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1120px, calc(100% - 28px)); margin: 28px auto 56px; }
+    h1, h2 { line-height: 1.2; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 5vw, 3rem); }
+    h2 { margin-top: 0; font-size: 1.2rem; }
+    p { margin: .5rem 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .muted { color: var(--muted); }
+    .panel {
+      margin-top: 18px;
       padding: 20px;
-      background: #f7f7f7;
-      color: #222;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
     }
-
-    h1 {
-      text-align: center;
+    .notice {
+      border-left: 5px solid var(--gold);
+      background: var(--gold-soft);
+      box-shadow: none;
     }
-
-    textarea {
-      width: 100%;
-      height: 300px;
-      padding: 12px;
-      font-family: monospace;
-      font-size: 14px;
-      box-sizing: border-box;
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .stat { padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
+    .stat strong { display: block; font-size: 1.55rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    button, input, select {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--line);
     }
-
     button {
-      margin-top: 15px;
-      padding: 12px 18px;
-      font-size: 16px;
+      min-height: 44px;
+      padding: 10px 15px;
+      background: var(--panel);
+      color: var(--text);
       cursor: pointer;
+      font-weight: 700;
     }
-
-    #status {
-      margin-top: 20px;
-      padding: 15px;
-      background: #fff;
-      border: 1px solid #ddd;
+    button.primary { background: var(--gold); color: #fff; border-color: var(--gold); }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    label.setting { display: grid; gap: 5px; color: var(--muted); font-size: .9rem; }
+    input[type="number"] { width: 110px; padding: 9px; background: var(--panel); color: var(--text); }
+    input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--gold); }
+    .check { display: flex; align-items: center; gap: 8px; color: var(--text); }
+    progress { width: 100%; height: 20px; accent-color: var(--gold); }
+    .status-line { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .ok { color: var(--ok); }
+    .error { color: var(--error); }
+    .warn { color: var(--warn); }
+    .log {
+      height: 270px;
+      overflow: auto;
+      padding: 12px;
+      background: color-mix(in srgb, var(--bg) 78%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
       white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: var(--panel); }
+    .table-wrap { max-height: 440px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    .slug { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; word-break: break-word; }
+    .host { color: var(--muted); font-size: .84rem; }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .panel { padding: 16px; }
+      th:nth-child(3), td:nth-child(3) { display: none; }
     }
   </style>
 </head>
 <body>
+<main>
+  <header>
+    <h1>Baixador dos JSONs do Oratio</h1>
+    <p class="muted">Fila sequencial com 287 fontes incorporadas. Cada resposta é salva como <code>{slug}.json</code>.</p>
+  </header>
 
-  <h1>Baixar imagens do Oratio</h1>
+  <section class="panel notice">
+    <strong>Modo recomendado:</strong> use um navegador Chromium em computador, clique em <em>Selecionar pasta</em> e autorize a gravação. O modo alternativo dispara downloads individuais e pode exigir a permissão “downloads automáticos” do navegador.
+  </section>
 
-  <p>Cole abaixo o JSON no formato:</p>
+  <section class="panel">
+    <h2>Progresso</h2>
+    <div class="grid">
+      <div class="stat"><span>Total</span><strong id="total">287</strong></div>
+      <div class="stat"><span>Concluídos</span><strong id="done">0</strong></div>
+      <div class="stat"><span>Pendentes</span><strong id="pending">287</strong></div>
+      <div class="stat"><span>Erros</span><strong id="failed">0</strong></div>
+    </div>
+    <p><progress id="progress" max="287" value="0"></progress></p>
+    <div class="status-line">
+      <span id="runStatus">Pronto para iniciar.</span>
+      <span id="folderStatus" class="muted">Nenhuma pasta selecionada.</span>
+    </div>
+  </section>
 
-  <pre>[
-  {
-    "title": "São José",
-    "image": "https://site.com/imagem.jpg"
+  <section class="panel">
+    <h2>Controles</h2>
+    <div class="controls">
+      <button id="chooseFolder">Selecionar pasta</button>
+      <button id="start" class="primary">Iniciar ou continuar</button>
+      <button id="pause" disabled>Pausar</button>
+      <button id="retry">Tentar erros novamente</button>
+      <button id="reset">Limpar progresso</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Limites de acesso</h2>
+    <div class="controls">
+      <label class="setting">Intervalo mínimo (s)<input id="minDelay" type="number" min="2" max="120" value="8"></label>
+      <label class="setting">Intervalo máximo (s)<input id="maxDelay" type="number" min="2" max="180" value="12"></label>
+      <label class="setting">Arquivos por lote<input id="batchSize" type="number" min="1" max="100" value="12"></label>
+      <label class="setting">Pausa entre lotes (s)<input id="batchPause" type="number" min="0" max="1800" value="90"></label>
+      <label class="setting">Tentativas por arquivo<input id="maxRetries" type="number" min="1" max="6" value="3"></label>
+      <label class="setting">Tempo-limite (s)<input id="timeout" type="number" min="10" max="300" value="60"></label>
+      <label class="check"><input id="balanceHosts" type="checkbox" checked> Alternar hospedantes</label>
+      <label class="check"><input id="validateJson" type="checkbox" checked> Validar JSON antes de salvar</label>
+    </div>
+    <p class="muted">A página realiza somente uma requisição por vez. Respostas 429 e falhas temporárias recebem espera crescente antes de uma nova tentativa.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Registro</h2>
+    <div id="log" class="log" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Arquivos incorporados</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Arquivo</th><th>Hospedante</th><th>Situação</th></tr></thead>
+        <tbody id="fileRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+const SOURCES = [{"slug":"15-sabados-a-nossa-senhora-do-rosario","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FDevo%C3%A7%C3%B5es%20especiais%2Fdevocao-15-sabados-ns-rosarii.json?alt=media&token=aa551c67-f001-4b13-be12-96146984b5e3"},{"slug":"40-pai-nossos","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F40-pai-nossos.json?alt=media&token=32ca248b-2aeb-4d27-b279-62ec2ba82da3"},{"slug":"a-deus-uno-e-trino","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fa-deus-uno-e-trino.json?alt=media&token=c38d0d3b-cc16-4687-b85c-d459e636a0c8"},{"slug":"a-vossa-protecao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/%C3%80_vossa_prote%C3%A7%C3%A3o.json"},{"slug":"adoro-te-devoto","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fadoro-te-devote.json?alt=media&token=938e58e8-2a11-48a8-92bc-ad4b84abd2ad"},{"slug":"alma-de-cristo-anima-christi","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Falma-de-cristo.json?alt=media&token=854e04b8-1154-43d9-a992-2bc62281926d"},{"slug":"alma-redemptoris-mater","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Falma-redemptoris-mater.json?alt=media&token=a502316a-e549-4e04-b1d1-5f88c1a3d590"},{"slug":"angelus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/%C3%A2ngelus.json"},{"slug":"angelus-latim","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/angelus-latim.json"},{"slug":"ato-de-abandono","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fato-de-abandono.json?alt=media&token=1f576340-d66e-4929-a615-8bb7642052f5"},{"slug":"ato-de-caridade","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fato-de-caridade.json?alt=media&token=b6c78bc1-bd1d-42a5-82de-4b63320c65d9"},{"slug":"ato-de-confianca","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fato-de-confianca.json?alt=media&token=48551dd2-5253-4698-8a97-2770f5d44d86"},{"slug":"ato-de-contricao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ato_de_contri%C3%A7%C3%A3o.json"},{"slug":"ato-de-esperanca","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fato-de-esperanca.json?alt=media&token=8cf2d97f-87bb-4a7d-9682-fabe1351f7fb"},{"slug":"ato-de-fe","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fato-de-fe.json?alt=media&token=971b2aef-2c3a-4484-b8e1-39ec8ab372fd"},{"slug":"ave-jose","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fave-jose.json?alt=media&token=5c3a25a4-224b-408d-b511-7b7ddfc91f39"},{"slug":"ave-maria","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ave_maria.json"},{"slug":"ave-maria-meditada-pelas-almas","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fave-maria-pelas-almas.json?alt=media&token=3d2225f5-b916-416a-b558-001baa650922"},{"slug":"ave-rainha-dos-ceus","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fave-rainha-dos-ceus.json?alt=media&token=b9376edd-2b4a-47e6-809b-9b4fdd1dcfb7"},{"slug":"cantico-de-nossa-senhora-magnificat","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fmagnificat.json?alt=media&token=16005b09-1f5d-4723-b1c8-8e4fa0c6c942"},{"slug":"cantico-de-zacarias-benedictus","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fcantico-de-zacarias.json?alt=media&token=fb61e068-3af0-4e9c-845b-9862bed2fbaf"},{"slug":"comunhao-espiritual","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fcomunhao-espiritual.json?alt=media&token=3c4116df-9539-432c-b1d8-bb6ec389848b"},{"slug":"confesso-a-deus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/confesso_a_deus.json"},{"slug":"consagracao-a-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/consagra%C3%A7%C3%A3o_a_nossa_senhora.json"},{"slug":"cordeiro-de-deus-agnus-dei","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fcordeiro-de-deus.json?alt=media&token=617a77d7-3bb7-402d-87f0-4fd702388516"},{"slug":"coroa-das-sete-dores-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/coroa_sete_dores_de_nossa_senhora.json"},{"slug":"coroa-de-nossa-senhora-das-lagrimas","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/coroa-nossa-senhora-das-lagrimas.json"},{"slug":"coroa-do-divino-espirito-santo","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FTer%C3%A7os%20e%20Coroas%2Fcoroa-divino-espirito-santo.json?alt=media&token=7b199c57-66a1-43d6-ab61-409d5f1101e7"},{"slug":"coroa-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FTer%C3%A7os%20e%20Coroas%2Fcoroa-almas-do-purgatorio.json?alt=media&token=ebb2230c-f891-439e-a2b3-35a533803b34"},{"slug":"coroinha-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/coroinha_de_nossa_senhora.json"},{"slug":"coroinha-de-nossa-senhora-latim","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/latim-coroinha_de_nossa_senhora.json"},{"slug":"coroinha-de-santa-filomena","url":"https://cdn.oratioapp.com.br/content/oracoes/coroas/santa-filomena.json"},{"slug":"couraca-de-sao-patricio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fcouraca-de-s-patricio.json?alt=media&token=2e633a0b-8d94-4122-bd75-082543f87cf5"},{"slug":"credo-apostolico","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/credo_apost%C3%B3lico.json"},{"slug":"credo-de-santo-atanasio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fcredo-de-santo-atanasio.json?alt=media&token=6e0be315-29f8-41a1-808b-76528449e476"},{"slug":"credo-niceno-constantinopolitano","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/credo_niceno-constantinopolitano.json"},{"slug":"dai-lhes-senhor-o-descanso-eterno-requiem","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Frequiem.json?alt=media&token=f229ad8c-ddaf-4920-96f7-ba29d54dc595"},{"slug":"devocao-das-9-primeiras-sextas-feiras-ao-sagrado-coracao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/devocao-9-sextas-feiras-scj.json"},{"slug":"espirito-santo-deus-de-amor-santo-tomas-de-aquino","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fespirito-santo-deus-de-amor.json?alt=media&token=8902e120-46cb-4566-978a-74fb4e755eb6"},{"slug":"espirito-santo-inspirai-me-santa-miriam-de-jesus-crucificado","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fespirito-santo-inspirai-nos.json?alt=media&token=89efeafb-7939-4174-8628-fdac683abb6a"},{"slug":"exame-de-consciencia-detalhado-a-partir-dos-mandamentos-de-deus-e-da-igreja","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/exame-consciencia-detalhado.json"},{"slug":"exercicio-de-desagravo-pelo-carnaval","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ato-desagravo-pelo-carnaval.json"},{"slug":"gloria-a-deus-nas-alturas-gloria-in-excelsis-deo","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fgloria-a-deus-nas-alturas.json?alt=media&token=1a363437-b617-4ab6-a427-29c4564fdc47"},{"slug":"gloria-ao-pai","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/gl%C3%B3ria_ao_pai.json"},{"slug":"guia-para-confissao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/guia-confissao.json"},{"slug":"hora-santa","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fhora-santa.json?alt=media&token=24296a75-bc19-4ed2-b38f-b137effbc5c2"},{"slug":"hora-santa-de-santa-gemma-galgani","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fhora-santa-sta-gemma.json?alt=media&token=86177294-f274-410f-a6ac-d54d0b9d9dc6"},{"slug":"inspirai-o-senhor","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Finpirai-o-senhor.json?alt=media&token=f1e2ed39-dd3e-4b2e-bd59-695c774b59bf"},{"slug":"invocacao-ao-espirito-santo-pe-stefano-gobbi","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Finvocacao-do-espirito-santo-pe-gobbi.json?alt=media&token=e09da8a3-bc4c-4d50-b1cc-f8e5690f9e07"},{"slug":"ladainha-a-jesus-misericordioso-por-uma-boa-morte","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-jesus-misericordioso-boa-mrte.json"},{"slug":"ladainha-a-nossa-senhora-mae-da-divina-misericordia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-ns-mae-divina-misericordia.json"},{"slug":"ladainha-a-sao-luis-maria-grignion-de-montfort","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-s-luis-montfort.json"},{"slug":"ladainha-a-sao-miguel-arcanjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-s-miguel-arcanjo.json"},{"slug":"ladainha-ao-menino-jesus-de-praga","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-menino-jesus-prga.json"},{"slug":"ladainha-ao-santissimo-nome-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-ss-nome-jesus.json"},{"slug":"ladainha-da-divina-misericordia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-divina-misericordia.json"},{"slug":"ladainha-da-humildade","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-humildade.json"},{"slug":"ladainha-da-sagrada-cabeca-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-sagrada-cabeca-jesus.json"},{"slug":"ladainha-das-chagas-de-cristo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-chagas-cristo.json"},{"slug":"ladainha-de-deus-pai","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-deus-pai.json"},{"slug":"ladainha-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-nossa-senhora.json"},{"slug":"ladainha-de-santa-filomena","url":"https://cdn.oratioapp.com.br/content/oracoes/ladainhas/santa-filomena.json"},{"slug":"ladainha-de-sao-filipe-neri","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FLadainhas%2Fladainha-s-filipe-neri.json?alt=media&token=97f0d6dd-3d34-401b-92fd-63b4f3c0414d"},{"slug":"ladainha-de-sao-jose","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fladainha-s-jos%C3%A9.json?alt=media&token=69af0542-47df-4f4c-ba3e-71bac5ab74f6"},{"slug":"ladainha-do-espirito-santo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-espirito-santo.json"},{"slug":"ladainha-do-preciosissimo-sangue-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-preciosissimo-sangue-jesus.json"},{"slug":"ladainha-do-sagrado-coracao-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ladainha-sagrado-coracao-jesus.json"},{"slug":"ladainha-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FLadainhas%2Fladainha-almas-purgatorii.json?alt=media&token=f7e768e2-2703-408c-aef1-fe736b9619eb"},{"slug":"lembrai-vos","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/lembrai-vos.json"},{"slug":"livrai-me-senhor-jesus","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Flivrai-me-senhor-jesus.json?alt=media&token=388ad339-f295-4b4e-8ad0-43c724cbd13d"},{"slug":"mes-com-o-sagrado-coracao-de-jesus","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FDevo%C3%A7%C3%B5es%20especiais%2Fmes-sagrado-coracao-jesus2.json?alt=media&token=5e4138d8-070b-42c9-8090-6c16ac5336e8"},{"slug":"mes-de-nossa-senhora","url":"https://cdn.oratioapp.com.br/content/oracoes/devocoes-mensais/mes-de-maria.json"},{"slug":"mes-de-sao-jose","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/mes_sao_jose.json"},{"slug":"nove-meses-com-maria","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nove-meses-com-maria.json"},{"slug":"novena-a-cristo-rei","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_cristo_rei.json"},{"slug":"novena-a-nossa-senhora-aparecida","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_aparecida.json"},{"slug":"novena-a-nossa-senhora-da-anunciacao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nossa_senhora_da_anuncia%C3%A7%C3%A3o.json"},{"slug":"novena-a-nossa-senhora-da-apresentacao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nossa_senhora_da_apresenta%C3%A7%C3%A3o.json"},{"slug":"novena-a-nossa-senhora-da-conceicao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nossa_senhora_da_concei%C3%A7%C3%A3o.json"},{"slug":"novena-a-nossa-senhora-das-candeias","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-ns-candeias.json"},{"slug":"novena-a-nossa-senhora-das-dores","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_nossa_senhora_das_dores.json"},{"slug":"novena-a-nossa-senhora-das-gracas","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-ns-gracas.json"},{"slug":"novena-a-nossa-senhora-de-fatima","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_de_f%C3%A1tima.json"},{"slug":"novena-a-nossa-senhora-de-guadalupe","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_de_guadalupe.json"},{"slug":"novena-a-nossa-senhora-de-lourdes","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_de_lourdes.json"},{"slug":"novena-a-nossa-senhora-do-brasil","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-n-s-do-brasil.json"},{"slug":"novena-a-nossa-senhora-do-carmo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_do_carmo.json"},{"slug":"novena-a-nossa-senhora-do-desterro","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-ns-desterro.json"},{"slug":"novena-a-nossa-senhora-do-perpetuo-socorro","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_nossa_senhora_do_perpetuo_socorro.json"},{"slug":"novena-a-nossa-senhora-do-rosario","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_nossa_senhora_do_ros%C3%A1rio.json"},{"slug":"novena-a-sagrada-face","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sagrada-face.json"},{"slug":"novena-a-sagrada-familia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_sagrada_fam%C3%ADlia.json"},{"slug":"novena-a-santa-agueda","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_santa_%C3%81gueda.json"},{"slug":"novena-a-santa-bernadette-soubirous","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sta-bernadette-soubirous.json"},{"slug":"novena-a-santa-catarina-de-alexandria","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_santa_catarina_de_alexandria.json"},{"slug":"novena-a-santa-catarina-de-sena","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_santa_catarina_de_sena.json"},{"slug":"novena-a-santa-cecilia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_santa_cec%C3%ADlia.json"},{"slug":"novena-a-santa-clara-de-assis","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_santa_clara_de_assis.json"},{"slug":"novena-a-santa-edwiges","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_santa_edwiges.json"},{"slug":"novena-a-santa-escolastica","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sta-escolastica.json"},{"slug":"novena-a-santa-faustina-kowalska","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_faustina.json"},{"slug":"novena-a-santa-francisca-romana","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_francisca_romana.json"},{"slug":"novena-a-santa-gemma-galgani","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sta-gemma-galgani.json"},{"slug":"novena-a-santa-gertrudes","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_gertrudes.json"},{"slug":"novena-a-santa-gianna-beretta-molla","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-st-gianna-molla.json"},{"slug":"novena-a-santa-ines","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_in%C3%AAs.json"},{"slug":"novena-a-santa-isabel-da-hungria","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_isabel_da_hungria.json"},{"slug":"novena-a-santa-isabel-de-portugal","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_isabel_de_portugal.json"},{"slug":"novena-a-santa-luzia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_luzia.json"},{"slug":"novena-a-santa-margarida-maria-alacoque","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_margarida_maria_alacoque.json"},{"slug":"novena-a-santa-maria-goretti","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_maria_goretti.json"},{"slug":"novena-a-santa-maria-mae-de-deus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_maria_m%C3%A3e_de_deus.json"},{"slug":"novena-a-santa-monica","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_santa_m%C3%B4nica.json"},{"slug":"novena-a-santa-paulina-do-coracao-agonizante-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_paulina_do_cora%C3%A7%C3%A3o_agonizante_de_jesus.json"},{"slug":"novena-a-santa-rita-de-cassia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_rita_de_cassia.json"},{"slug":"novena-a-santa-rosa-de-lima","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_rosa_de_lima.json"},{"slug":"novena-a-santa-teresa-benedita-da-cruz-edith-stein","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_santa_edith_stein.json"},{"slug":"novena-a-santa-teresa-davila","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_a_santa_teresa_d%C3%81vila.json"},{"slug":"novena-a-santissima-trindade","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_sant%C3%ADssima_trindade.json"},{"slug":"novena-a-santo-afonso-maria-de-ligorio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santo-afonso-de-ligorio.json"},{"slug":"novena-a-santo-agostinho","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santo-agostinho-de-hipona.json"},{"slug":"novena-a-santo-antonio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santo-antonio-de-padua.json"},{"slug":"novena-a-santo-antonio-maria-claret","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-st-antonio-claret.json"},{"slug":"novena-a-santo-expedito","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-st-expedito.json"},{"slug":"novena-a-santo-inacio-de-antioquia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santo-inacio-antioquia.json"},{"slug":"novena-a-santo-inacio-de-loyola","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-st-inacio-de-loyola.json"},{"slug":"novena-a-sao-bartolomeu","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-bartolomeu.json"},{"slug":"novena-a-sao-bento","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-bento.json"},{"slug":"novena-a-sao-caetano","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-caetano.json"},{"slug":"novena-a-sao-camilo-de-lellis","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-camilo-de-lellis.json"},{"slug":"novena-a-sao-carlo-acutis","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-carlo-acutis.json"},{"slug":"novena-a-sao-charbel-makhlouf","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-charbel-makhlouf.json"},{"slug":"novena-a-sao-domingos-de-gusmao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-domingos-de-gusmao.json"},{"slug":"novena-a-sao-filipe-neri","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FNovenas%2Fnovena-s-filipe-neri.json?alt=media&token=440b5c12-382a-443e-9c62-1c79288e61cb"},{"slug":"novena-a-sao-francisco-de-assis","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-francisco-assis.json"},{"slug":"novena-a-sao-frei-galvao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-frei-galvao.json"},{"slug":"novena-a-sao-joao-batista","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_s%C3%A3o_jo%C3%A3o_batista.json"},{"slug":"novena-a-sao-joao-batista-de-la-salle","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joao-batista-de-la-salle.json"},{"slug":"novena-a-sao-joao-da-cruz","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joao-da-cruz.json"},{"slug":"novena-a-sao-joao-de-deus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joao-de-deus.json"},{"slug":"novena-a-sao-joao-maria-vianney","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joao-maria-vianney.json"},{"slug":"novena-a-sao-joao-paulo-ii","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joao-paulo-ii.json"},{"slug":"novena-a-sao-joaquim-e-santa-ana","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-joaquim-sta-ana.json"},{"slug":"novena-a-sao-jorge-da-capadocia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-jorge.json"},{"slug":"novena-a-sao-jose","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-jose.json"},{"slug":"novena-a-sao-jose-de-anchieta","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_sao_jose_de_anchieta.json"},{"slug":"novena-a-sao-jose-de-cupertino","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-jose-de-cupertino.json"},{"slug":"novena-a-sao-jose-em-honra-das-sete-alegrias-e-dores","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-jose-alegrias-dores.json"},{"slug":"novena-a-sao-jose-operario","url":"https://firebasestorage.googleapis.com/v0/b/oratio-storage.appspot.com/o/novena-s-jose-operario.json?alt=media&token=5f3e2459-f735-4920-87a4-4ab7592a2703"},{"slug":"novena-a-sao-judas-tadeu","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-judas-tadeu.json"},{"slug":"novena-a-sao-lourenco","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-lourenco.json"},{"slug":"novena-a-sao-lucas","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-lucas-evangelista.json"},{"slug":"novena-a-sao-luis-e-santa-zelia-martin","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-luis-sta-zelia-martin.json"},{"slug":"novena-a-sao-luiz-gonzaga","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_sao_luiz_gonzaga.json"},{"slug":"novena-a-sao-maximiliano-maria-kolbe","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-maximiliano-kolbe.json"},{"slug":"novena-a-sao-pancracio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FNovenas%2Fnovena-s-pancracio.json?alt=media&token=0b7c6a68-c9cf-48e6-b839-d1ae143e6d69"},{"slug":"novena-a-sao-patricio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-patricio.json"},{"slug":"novena-a-sao-paulo-apostolo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao_paulo.json"},{"slug":"novena-a-sao-paulo-da-cruz","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-paulo-da-cruz.json"},{"slug":"novena-a-sao-pedro-apostolo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_sao_pedro_apostolo.json"},{"slug":"novena-a-sao-pedro-de-alcantara","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-pedro-alcantara.json"},{"slug":"novena-a-sao-pedro-juliao-eymard","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-pedro-juliao.json"},{"slug":"novena-a-sao-peregrino","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-peregrino.json"},{"slug":"novena-a-sao-pio-de-pietrelcina","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-pio-pietrelcina.json"},{"slug":"novena-a-sao-pio-x","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-pio-x.json"},{"slug":"novena-a-sao-rafael-arnaiz-baron","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-rafael-arnaiz.json"},{"slug":"novena-a-sao-roque","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-roque.json"},{"slug":"novena-a-sao-valentim","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-valentim.json"},{"slug":"novena-a-sao-vicente-de-ferrer","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-vicente-ferrer.json"},{"slug":"novena-a-sao-vicente-de-paulo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-s-vicente-de-paulo.json"},{"slug":"novena-a-todos-os-santos","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-todos-os-santos.json"},{"slug":"novena-ao-anjo-da-guarda","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sto-anjo-da-guarda.json"},{"slug":"novena-ao-imaculado-coracao-de-maria","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-imaculado_coracao_de_maria.json"},{"slug":"novena-ao-sagrado-coracao-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_do_sagrado_cora%C3%A7%C3%A3o_de_jesus.json"},{"slug":"novena-ao-santissimo-nome-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santissimo-nome-de-jesus.json"},{"slug":"novena-ao-santissimo-sacramento","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-santissimo-sacramento.json"},{"slug":"novena-ao-verbo-encarnado","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-verbo-encarnado.json"},{"slug":"novena-aos-beatos-inacio-de-azevedo-e-companheiros","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-beatos_inacio_de_azevedo_e_companheiros.json"},{"slug":"novena-aos-pastorinhos-jacinta-e-francisco","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-pastorinhos-francisco-jacinta.json"},{"slug":"novena-aos-santos-arcanjos","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-stos-arcanjos.json"},{"slug":"novena-consoladora-a-sao-rafael-arcanjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-sao-rafael-arcanjo.json"},{"slug":"novena-da-divina-misericordia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-divina_miseric%C3%B3rdia.json"},{"slug":"novena-da-epifania-do-senhor","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-epifania_do_senhor.json"},{"slug":"novena-da-exaltacao-da-santa-cruz","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-exaltacao_da_santa_cruz.json"},{"slug":"novena-da-graca-de-sao-francisco-xavier","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-gra%C3%A7a-s-francisco-xavier.json"},{"slug":"novena-da-natividade-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_da_natividade_de_nossa_senhora.json"},{"slug":"novena-da-purificacao-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nossa_senhora_da_purifica%C3%A7%C3%A3o.json"},{"slug":"novena-das-rosas-de-santa-teresinha","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_das_rosas_santa_teresinha.json"},{"slug":"novena-de-agradecimento-a-nossa-senhora-de-pompeia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-ns-pompeia-agradecimento.json"},{"slug":"novena-de-natal-com-meditacoes-de-sao-leao-magno","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena_de_natal.json"},{"slug":"novena-de-natal-de-santo-andre","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-natal-st-andre.json"},{"slug":"novena-de-nossa-senhora-da-assuncao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-nossa_senhora_da_assun%C3%A7%C3%A3o.json"},{"slug":"novena-de-pentecostes","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-pentecostes.json"},{"slug":"novena-de-suplica-a-nossa-senhora-de-pompeia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-ns-pompeia-suplica.json"},{"slug":"novena-pelas-almas-do-purgatorio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-almas_do_purgat%C3%B3rio.json"},{"slug":"novena-vocacional-a-rainha-dos-apostolos","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/novena-rainha-dos-apostolos.json"},{"slug":"o-boa-cruz","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fo-boa-cruz.json?alt=media&token=757bc7f7-65ea-4194-ab72-021d3c238114"},{"slug":"o-hostia-santa","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-o-hsotia-santa.json?alt=media&token=328c4be9-2783-45f0-9eb7-b2504e743647"},{"slug":"o-salutaris-hostia","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fo-salutaris-hostia.json?alt=media&token=9f4c419d-a090-4dd2-bdc8-568334ccfbb9"},{"slug":"oferecimento-do-dia","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foferecimento-do-dia.json?alt=media&token=1da22c95-7bff-4f53-8a9b-31d6ba3c1770"},{"slug":"oferta-diaria-ao-espirito-santo-beata-elena-guerra","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foferta-diaria-ao-espirito-santo.json?alt=media&token=05ca420f-b3d7-441c-a6a7-fe06c1b8d32a"},{"slug":"oficio-da-paixao-de-nosso-senhor","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/of%C3%ADcio_da_paix%C3%A3o_de_nosso_senhor.json"},{"slug":"oficio-das-benditas-almas-do-purgatorio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/of%C3%ADcio_das_benditas_almas_do_purgat%C3%B3rio.json"},{"slug":"oficio-das-trevas","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/of%C3%ADcio_das_trevas.json"},{"slug":"oficio-de-nossa-senhora","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/of%C3%ADcio_de_nossa_senhora.json"},{"slug":"oficio-glorioso-de-sao-jose","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/oficio-s-jose.json"},{"slug":"olhai-senhor-do-vosso-santuario","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Folhai-senhor-do-vosso-santuario.json?alt=media&token=7fdbac64-f34d-484f-a260-3d2cef2dd67a"},{"slug":"oracao-a-imaculada-conceicao-pelo-app-oratio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ora%C3%A7%C3%A3o_%C3%A0_imaculada_concei%C3%A7%C3%A3o_pelo_app_oratio.json"},{"slug":"oracao-a-jesus-crucificado","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fa-jesus-crucificado.json?alt=media&token=7bae3607-653b-4bff-898d-5ae0d4f113da"},{"slug":"oracao-a-jesus-crucificado-em-sufragio-das-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-jesus-crucificado.json?alt=media&token=c54a06b5-82e6-4c54-928c-79f43f027a28"},{"slug":"oracao-a-jesus-sao-luis-de-montfort","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-a-jesus-s-luis-montfort.json?alt=media&token=7dfac2e6-8bc4-4fbf-a2be-1eaf4cc0e98d"},{"slug":"oracao-a-nossa-senhora-de-montligeon-pelas-almas-abandonadas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fns-montligeon-pelas-almas.json?alt=media&token=b5877116-e6be-4611-90cb-d0bdcc7b707f"},{"slug":"oracao-a-santa-cruz-pelas-almas","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-sta-cruz-pelas-almas.json?alt=media&token=3f93cf32-91cd-4883-b8ca-db337c8af213"},{"slug":"oracao-a-sao-jose-para-antes-do-trabalho","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-s-jose-antes-do-trabalho.json?alt=media&token=aedd6695-f32f-42e5-aaba-2701569dcd44"},{"slug":"oracao-a-sao-jose-pela-igreja-papa-leao-xiii","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-s-jose-pela-igreja.json?alt=media&token=ab7c757f-5f00-4153-91d6-fcf8c6b491c3"},{"slug":"oracao-a-sao-jose-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fsao-jose-pelas-almas.json?alt=media&token=6cacf331-70d9-48cf-a147-94bec3584742"},{"slug":"oracao-a-sao-miguel-arcanjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ora%C3%A7%C3%A3o_a_s%C3%A3o_miguel_arcanjo.json"},{"slug":"oracao-ao-espirito-santo","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-ao-espirito-santo.json?alt=media&token=74975a04-e231-4d5c-9bd6-42e2d396bd34"},{"slug":"oracao-contra-maus-pensamentos","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-contra-maus-pensamentos.json?alt=media&token=cbdf5421-9d95-4a49-be68-4129c4313b79"},{"slug":"oracao-da-medalha-de-sao-bento","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fmedalha-de-s-bento.json?alt=media&token=695a1e46-9b88-45a2-8db4-7b9eab9a94c5"},{"slug":"oracao-da-medalha-milagrosa","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-da-medalha-milagrosa.json?alt=media&token=d0640463-faf3-4f17-9671-23ff5c4d4a73"},{"slug":"oracao-de-sao-nicolau-de-tolentino-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-de-s-nicolau-de-tolentino-pelas-almas.json?alt=media&token=4f4c021b-daa6-45a8-ae1f-9373b69f0a6e"},{"slug":"oracao-para-alcancar-a-salvacao-santo-agostinho","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-para-alcancar-a-propria-salvacao.json?alt=media&token=36801a38-f6c6-4995-bab1-193590921825"},{"slug":"oracao-para-antes-de-comungar","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-antes-de-comungar.json?alt=media&token=ae41ce59-2567-46cc-9988-8a16ef10da1d"},{"slug":"oracao-para-antes-de-estudar-santo-tomas-de-aquino","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-antes-de-estudar.json?alt=media&token=821b784c-3a70-4bdc-90fa-6fc67957200f"},{"slug":"oracao-para-libertar-mil-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-sta-gertrudes-pelas-almas.json?alt=media&token=cc6220bd-cfe9-4a4c-9072-b9c924886d34"},{"slug":"oracao-para-libertar-uma-alma-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-para-libertar-uma-alma-purgatorio.json?alt=media&token=a2b04842-efa5-4de8-a54b-886db7434b9f"},{"slug":"oracao-para-o-periodo-de-sede-vacante","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/oracao-para-sede-vacante.json"},{"slug":"oracao-para-pedir-a-caridade-santo-afonso-de-ligorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-para-pedir-a-caridade.json?alt=media&token=68e5f905-0ff2-4964-883d-978b8b18fa50"},{"slug":"oracao-para-pedir-a-pureza","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-para-pedir-a-pureza.json?alt=media&token=900a6288-a853-4f14-b2fa-17945580cee6"},{"slug":"oracao-para-pedir-os-7-dons-do-espirito-santo","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fpara-pedir-o-7-dons-do-espirito-santo.json?alt=media&token=33f87cb8-b20f-4b60-9983-6466cdd5183b"},{"slug":"oracao-pela-paz-da-igreja","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pela-paz-da-igreja.json?alt=media&token=c705039b-1131-437e-94dd-5952eeb3bddf"},{"slug":"oracao-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-pelas-almas-do-purgatorio.json?alt=media&token=573a8045-c901-4c29-b2e4-a07ec9633e71"},{"slug":"oracao-pelo-dom-das-lagrimas","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelo-dom-das-lagrimas.json?alt=media&token=54c82f7e-64e5-4f8a-8ed8-93d9ca3f88e1"},{"slug":"oracao-pelo-papa-leao-xiv","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/oracao-papa-leao-xiv.json"},{"slug":"oracao-pelo-perdao-dos-pecados","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelo-perdao-dos-pecados.json?alt=media&token=2d98de64-8cba-48e6-814b-56bcc5ede08c"},{"slug":"oracao-pelos-agonizantes","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-agonoizantes.json?alt=media&token=0e6addc0-4c60-4777-84bd-7a0c01de1837"},{"slug":"oracao-pelos-fieis-defuntos","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-fieis-defuntos.json?alt=media&token=918f30b8-0b79-44ac-80cd-f138e34e0da2"},{"slug":"oracao-pelos-pais","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-pais.json?alt=media&token=e0079c6c-cf9a-43cc-a941-66ecb7fd7b7b"},{"slug":"oracao-pelos-pecadores","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-pecadores.json?alt=media&token=345266df-1291-4697-985b-5556132898a3"},{"slug":"oracao-pelos-sacerdotes-santa-teresinha","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-sacerdotes-st-teresinha.json?alt=media&token=095e2141-d51a-40ad-9ce9-db0df3b7a817"},{"slug":"oracao-universal-papa-clemente-xi","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Foracao-universal-clemente-xi.json?alt=media&token=c57db1dc-71ec-4c46-887a-9fbc597c82f1"},{"slug":"oracoes-ao-acordar","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ora%C3%A7%C3%B5es_da_manha.json"},{"slug":"oracoes-de-fatima","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-da-fatima.json?alt=media&token=3183b6ab-8273-4dc9-b54a-6db6871821a0"},{"slug":"oracoes-do-anjo-de-portugal","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-do-anjo-de-portugal.json?alt=media&token=1722d67f-3756-4cbc-bf45-e09b62d8b105"},{"slug":"oracoes-para-a-santa-missa","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/oracoes-antes-depois-missa.json"},{"slug":"oracoes-para-antes-de-dormir","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/ora%C3%A7%C3%B5es_da_noite.json"},{"slug":"oracoes-para-antes-e-depois-das-refeicoes","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracoes-antes-e-depois-das-refeicoes.json?alt=media&token=1b723bdf-df1c-423c-8b77-9716cee76786"},{"slug":"oracoes-para-depois-da-confissao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/oracoes-depois-confissao.json"},{"slug":"oracoes-para-pedir-a-paciencia","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-para-pedir-a-paciencia.json?alt=media&token=d65d8a88-acb0-4fc0-ba99-07db93cedd60"},{"slug":"oracoes-pela-alma-do-papa-francisco","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/pela-alma-do-papa-francisco.json"},{"slug":"oracoes-pela-graca-da-boa-morte","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pela-graca-de-uma-boa-morte.json?alt=media&token=6d516427-bab9-4f06-a2d5-cf765b52e024"},{"slug":"oracoes-pela-unidade-da-igreja","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pela-unidade-da-igreja.json?alt=media&token=03efbd7b-a372-44b9-8e5b-cc8d748aba21"},{"slug":"oracoes-pelos-doentes","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-pelos-doentes.json?alt=media&token=3e607937-81f9-42b0-a370-2e0faee84b7f"},{"slug":"pai-nosso","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/pai_nosso.json"},{"slug":"pai-nosso-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fpai-nosso-pelas-almas.json?alt=media&token=8a7c19cc-96cd-4fdc-a637-d4fd4425609b"},{"slug":"pange-lingua","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fpange-lingua.json?alt=media&token=f89b87e2-9b03-4905-9c90-49140d15ee81"},{"slug":"quaresma-de-santa-filomena","url":"https://cdn.oratioapp.com.br/content/oracoes/quaresmas/santa-filomena.json"},{"slug":"quaresma-de-sao-miguel-arcanjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/quaresma-sao-miguel-arcanjo.json"},{"slug":"regina-caeli","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fregina-caeli.json?alt=media&token=e62a6052-339e-4479-b8d9-926f768db31c"},{"slug":"relogio-da-paixao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/relogio_da_paixao.json"},{"slug":"rosario-de-deus-pai","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FTer%C3%A7os%20e%20Coroas%2Frosario-deus-pai.json?alt=media&token=e4d319a5-8acd-4d25-85de-cbf6720a72cb"},{"slug":"salve-rainha","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/salve_rainha.json"},{"slug":"salve-rainha-pelos-mortos","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fsalve-rainha-pelas-almas.json?alt=media&token=577674b7-aa10-439d-8afd-2d58bdb1e9cf"},{"slug":"santa-maria-socorrei","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fsanta-maria-socorrei.json?alt=media&token=184aed7b-b3d5-45f8-b560-5016e3c6267a"},{"slug":"santo-anjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/santo_anjo.json"},{"slug":"santo-anjo-amparo-de-minhalma","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fsanto-anjo-amparo-de-minh-alma.json?alt=media&token=36cd2850-fb6b-4ec6-bdb1-20b0e8677bf2"},{"slug":"santo-santo-santo","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fsanto-santo-santo-oracao.json?alt=media&token=c9ddbfbc-f191-4a3c-930e-20e3ea948478"},{"slug":"sao-jose-pai-e-protetor-das-virgens","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fsao-jose-pai-e-protetor-das-virgens.json?alt=media&token=5dda64e6-f4fe-4723-9ae0-4cac8270df82"},{"slug":"sinal-da-cruz","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/sinal_da_cruz.json"},{"slug":"suplica-a-santissima-virgem-pelas-almas-do-purgatorio","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fsuplica-ns-pelas-almas.json?alt=media&token=f5ce94aa-d350-44db-b211-995daa870f91"},{"slug":"te-deum","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-te-deum.json?alt=media&token=3404e57e-1808-435d-b51f-8c55626a9314"},{"slug":"terco-da-imaculada-conceicao","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco-imaculada-conceicao.json"},{"slug":"terco-da-misericordia","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco_da_divina_misericordia.json"},{"slug":"terco-da-sagrada-face","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco-sagrada-face.json"},{"slug":"terco-da-sagrada-familia-de-nazare","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco-sagrada-familia.json"},{"slug":"terco-de-sao-jose","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco-sao-jose-meditacao.json"},{"slug":"terco-de-sao-miguel-arcanjo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco_de_sao_miguel_arcanjo.json"},{"slug":"terco-do-preciosissimo-sangue-de-jesus","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco_do_preciossimo_sangue_de_jesus.json"},{"slug":"terco-pelas-almas-do-purgatorio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/terco-almas-do-purgatorio.json"},{"slug":"tomai-senhor-e-recebei-santo-inacio-de-loyola","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Foracao-tomai-senhor-e-recebei.json?alt=media&token=0e5dad66-67be-4590-bee8-5827ad16b563"},{"slug":"trezena-a-santo-antonio","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/trezena-santo-antonio-de-padua.json"},{"slug":"trintena-a-sao-jose","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/trintena-s-jose.json"},{"slug":"vem-espirito-santo-papa-pio-xii","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2F1%2Fvem-espirito-santo.json?alt=media&token=aa221a56-5035-408d-9a5f-bae21caaa37b"},{"slug":"veni-creator-spiritus","url":"https://firebasestorage.googleapis.com/v0/b/oratio-imc.appspot.com/o/Content%2FOra%C3%A7%C3%B5es%2FOutras%2Fveni-creator-spiritus.json?alt=media&token=a58b3706-de02-44c4-bb27-ee2d173e9984"},{"slug":"via-sacra","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/via_sacra.json"},{"slug":"vinde-espirito-santo","url":"https://tstxvak.weebly.com/uploads/1/4/4/8/144864775/vinde_esp%C3%ADrito_santo.json"}];
+const DATA_VERSION = 'a33004ba6af0';
+const STORAGE_KEY = `oratio-json-downloader:${DATA_VERSION}`;
+const SETTINGS_KEY = `oratio-json-downloader-settings:${DATA_VERSION}`;
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  total: $('total'), done: $('done'), pending: $('pending'), failed: $('failed'),
+  progress: $('progress'), runStatus: $('runStatus'), folderStatus: $('folderStatus'),
+  chooseFolder: $('chooseFolder'), start: $('start'), pause: $('pause'), retry: $('retry'), reset: $('reset'),
+  minDelay: $('minDelay'), maxDelay: $('maxDelay'), batchSize: $('batchSize'), batchPause: $('batchPause'),
+  maxRetries: $('maxRetries'), timeout: $('timeout'), balanceHosts: $('balanceHosts'), validateJson: $('validateJson'),
+  log: $('log'), fileRows: $('fileRows')
+};
+
+let directoryHandle = null;
+let running = false;
+let pauseRequested = false;
+let state = loadState();
+let activeQueue = [];
+let lastHostRequest = new Map();
+
+function loadState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    return { statuses: raw.statuses || {}, errors: raw.errors || {}, updatedAt: raw.updatedAt || null };
+  } catch {
+    return { statuses: {}, errors: {}, updatedAt: null };
   }
-]</pre>
+}
 
-  <textarea id="jsonInput" placeholder="Cole seu JSON aqui"></textarea>
+function saveState() {
+  state.updatedAt = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
 
-  <button onclick="baixarImagens()">Baixar imagens</button>
+function saveSettings() {
+  const settings = readSettings();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
 
-  <div id="status">Aguardando JSON...</div>
-
-  <script>
-    function limparNomeArquivo(nome) {
-      return nome
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[\\/:*?"<>|]/g, "_")
-        .replace(/\s+/g, " ")
-        .trim();
+function restoreSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    for (const key of ['minDelay','maxDelay','batchSize','batchPause','maxRetries','timeout']) {
+      if (Number.isFinite(Number(s[key]))) els[key].value = Number(s[key]);
     }
+    if (typeof s.balanceHosts === 'boolean') els.balanceHosts.checked = s.balanceHosts;
+    if (typeof s.validateJson === 'boolean') els.validateJson.checked = s.validateJson;
+  } catch {}
+}
 
-    function obterExtensao(url, contentType) {
-      const urlLimpa = url.split("?")[0].split("#")[0];
-      const match = urlLimpa.match(/\.(jpg|jpeg|png|webp|gif)$/i);
+function readSettings() {
+  let minDelay = clampNumber(els.minDelay.value, 2, 120, 8);
+  let maxDelay = clampNumber(els.maxDelay.value, 2, 180, 12);
+  if (maxDelay < minDelay) [minDelay, maxDelay] = [maxDelay, minDelay];
+  return {
+    minDelay, maxDelay,
+    batchSize: clampNumber(els.batchSize.value, 1, 100, 12),
+    batchPause: clampNumber(els.batchPause.value, 0, 1800, 90),
+    maxRetries: clampNumber(els.maxRetries.value, 1, 6, 3),
+    timeout: clampNumber(els.timeout.value, 10, 300, 60),
+    balanceHosts: els.balanceHosts.checked,
+    validateJson: els.validateJson.checked
+  };
+}
 
-      if (match) {
-        return "." + match[1].toLowerCase();
-      }
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
 
-      if (contentType) {
-        if (contentType.includes("png")) return ".png";
-        if (contentType.includes("webp")) return ".webp";
-        if (contentType.includes("gif")) return ".gif";
-        if (contentType.includes("jpeg")) return ".jpg";
-      }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-      return ".jpg";
+async function interruptibleSleep(ms, label) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (pauseRequested) return false;
+    const remaining = end - Date.now();
+    if (label) els.runStatus.textContent = `${label} ${Math.ceil(remaining / 1000)} s`;
+    await sleep(Math.min(1000, remaining));
+  }
+  return true;
+}
+
+function randomDelayMs(settings) {
+  const seconds = settings.minDelay + Math.random() * (settings.maxDelay - settings.minDelay);
+  return Math.round(seconds * 1000);
+}
+
+function hostnameOf(url) {
+  try { return new URL(url).hostname; } catch { return 'endereço inválido'; }
+}
+
+function buildQueue(items, balanced) {
+  if (!balanced) return [...items];
+  const groups = new Map();
+  for (const item of items) {
+    const host = hostnameOf(item.url);
+    if (!groups.has(host)) groups.set(host, []);
+    groups.get(host).push(item);
+  }
+  const hosts = [...groups.keys()].sort((a, b) => groups.get(b).length - groups.get(a).length);
+  const queue = [];
+  let remaining = items.length;
+  while (remaining > 0) {
+    for (const host of hosts) {
+      const item = groups.get(host).shift();
+      if (item) { queue.push(item); remaining--; }
     }
+  }
+  return queue;
+}
 
-    function esperar(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
+function log(message, level = '') {
+  const time = new Date().toLocaleTimeString('pt-BR');
+  const line = document.createElement('div');
+  if (level) line.className = level;
+  line.textContent = `[${time}] ${message}`;
+  els.log.appendChild(line);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function updateUI() {
+  const completed = SOURCES.filter((x) => state.statuses[x.slug] === 'done').length;
+  const failed = SOURCES.filter((x) => state.statuses[x.slug] === 'error').length;
+  const pending = SOURCES.length - completed - failed;
+  els.total.textContent = SOURCES.length;
+  els.done.textContent = completed;
+  els.failed.textContent = failed;
+  els.pending.textContent = pending;
+  els.progress.max = SOURCES.length;
+  els.progress.value = completed;
+  els.start.disabled = running;
+  els.pause.disabled = !running;
+  els.chooseFolder.disabled = running;
+  els.retry.disabled = running || failed === 0;
+  els.reset.disabled = running;
+  renderRows();
+}
+
+function statusLabel(slug) {
+  const s = state.statuses[slug];
+  if (s === 'done') return '<span class="ok">Concluído</span>';
+  if (s === 'error') return '<span class="error">Erro</span>';
+  if (s === 'working') return '<span class="warn">Baixando</span>';
+  return '<span class="muted">Pendente</span>';
+}
+
+function renderRows() {
+  els.fileRows.innerHTML = SOURCES.map((item, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td class="slug">${escapeHtml(item.slug)}.json</td>
+      <td class="host">${escapeHtml(hostnameOf(item.url))}</td>
+      <td>${statusLabel(item.slug)}</td>
+    </tr>`).join('');
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+async function chooseDirectory() {
+  if (!('showDirectoryPicker' in window)) {
+    els.folderStatus.textContent = 'Este navegador não oferece seleção de pasta. Será usado o modo de downloads individuais.';
+    log('Seleção de pasta indisponível; o navegador usará downloads individuais.', 'warn');
+    return;
+  }
+  try {
+    directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    els.folderStatus.textContent = `Pasta selecionada: ${directoryHandle.name}`;
+    log(`Pasta selecionada: ${directoryHandle.name}`, 'ok');
+  } catch (error) {
+    if (error?.name !== 'AbortError') log(`Não foi possível selecionar a pasta: ${error.message}`, 'error');
+  }
+}
+
+async function ensureDirectoryPermission() {
+  if (!directoryHandle) return false;
+  const options = { mode: 'readwrite' };
+  if ((await directoryHandle.queryPermission(options)) === 'granted') return true;
+  return (await directoryHandle.requestPermission(options)) === 'granted';
+}
+
+class HttpError extends Error {
+  constructor(status, message, retryAfterMs = 0) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function parseRetryAfter(value) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+}
+
+async function fetchBuffer(item, settings) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), settings.timeout * 1000);
+  try {
+    const response = await fetch(item.url, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json, text/plain;q=0.9, */*;q=0.5' }
+    });
+    if (!response.ok) {
+      throw new HttpError(response.status, `HTTP ${response.status}`, parseRetryAfter(response.headers.get('Retry-After')));
     }
-
-    async function baixarImagens() {
-      const status = document.getElementById("status");
-      const texto = document.getElementById("jsonInput").value.trim();
-
-      if (!texto) {
-        status.textContent = "Cole o JSON primeiro.";
-        return;
-      }
-
-      let lista;
-
-      try {
-        lista = JSON.parse(texto);
-      } catch (e) {
-        status.textContent = "JSON inválido:\n\n" + e.message;
-        return;
-      }
-
-      if (!Array.isArray(lista)) {
-        status.textContent = "O JSON precisa ser uma lista, começando com [ e terminando com ].";
-        return;
-      }
-
-      let baixadas = 0;
-      let erros = 0;
-
-      for (let i = 0; i < lista.length; i++) {
-        const item = lista[i];
-        const titulo = item.title || ("imagem_" + (i + 1));
-        const url = item.image;
-
-        if (!url) {
-          erros++;
-          status.textContent = `Erro no item ${i + 1}/${lista.length}: campo "image" vazio.`;
-          await esperar(100);
-          continue;
-        }
-
-        status.textContent =
-          `Baixando ${i + 1}/${lista.length}\n\n` +
-          `${titulo}\n\n` +
-          `Baixadas: ${baixadas}\n` +
-          `Erros: ${erros}`;
-
-        try {
-          const resposta = await fetch(url);
-
-          if (!resposta.ok) {
-            throw new Error("HTTP " + resposta.status);
-          }
-
-          const blob = await resposta.blob();
-          const extensao = obterExtensao(url, blob.type);
-          const nomeArquivo = limparNomeArquivo(titulo) + extensao;
-
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(blob);
-          link.download = nomeArquivo;
-          document.body.appendChild(link);
-          link.click();
-
-          URL.revokeObjectURL(link.href);
-          link.remove();
-
-          baixadas++;
-        } catch (e) {
-          erros++;
-          console.error("Erro ao baixar:", titulo, url, e);
-        }
-
-        await esperar(100);
-      }
-
-      status.textContent =
-        `Concluído!\n\n` +
-        `Total: ${lista.length}\n` +
-        `Baixadas: ${baixadas}\n` +
-        `Erros: ${erros}`;
+    const buffer = await response.arrayBuffer();
+    if (!buffer.byteLength) throw new Error('Resposta vazia');
+    if (settings.validateJson) {
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer).replace(/^﻿/, '');
+      JSON.parse(text);
     }
-  </script>
+    return buffer;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
+async function saveBuffer(item, buffer) {
+  const filename = `${item.slug}.json`;
+  if (directoryHandle && await ensureDirectoryPermission()) {
+    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    try {
+      await writable.write(buffer);
+    } finally {
+      await writable.close();
+    }
+    return 'pasta';
+  }
+  const blob = new Blob([buffer], { type: 'application/json' });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+  return 'downloads';
+}
+
+async function waitForHost(item, settings) {
+  const host = hostnameOf(item.url);
+  const last = lastHostRequest.get(host) || 0;
+  const minGap = settings.minDelay * 1000;
+  const wait = Math.max(0, last + minGap - Date.now());
+  if (wait > 0) await interruptibleSleep(wait, `Respeitando intervalo de ${host}:`);
+  lastHostRequest.set(host, Date.now());
+}
+
+function isRetryable(error) {
+  if (error?.name === 'AbortError' || error instanceof TypeError) return true;
+  if (error instanceof SyntaxError) return false;
+  if (error instanceof HttpError) return [408, 425, 429, 500, 502, 503, 504].includes(error.status);
+  return true;
+}
+
+async function downloadOne(item, settings) {
+  for (let attempt = 1; attempt <= settings.maxRetries; attempt++) {
+    if (pauseRequested) return { paused: true };
+    state.statuses[item.slug] = 'working';
+    saveState();
+    updateUI();
+    try {
+      await waitForHost(item, settings);
+      log(`Baixando ${item.slug}.json — tentativa ${attempt}/${settings.maxRetries}`);
+      const buffer = await fetchBuffer(item, settings);
+      const mode = await saveBuffer(item, buffer);
+      state.statuses[item.slug] = 'done';
+      delete state.errors[item.slug];
+      saveState();
+      log(`Concluído: ${item.slug}.json (${buffer.byteLength.toLocaleString('pt-BR')} bytes, modo ${mode}).`, 'ok');
+      return { ok: true };
+    } catch (error) {
+      const message = error?.name === 'AbortError' ? 'tempo-limite excedido' : (error?.message || String(error));
+      const retryable = isRetryable(error);
+      log(`Falha em ${item.slug}.json: ${message}`, 'error');
+      if (!retryable || attempt >= settings.maxRetries) {
+        state.statuses[item.slug] = 'error';
+        state.errors[item.slug] = { message, url: item.url, at: new Date().toISOString() };
+        saveState();
+        return { ok: false };
+      }
+      const backoff = error?.retryAfterMs || (30000 * (2 ** (attempt - 1)) + Math.random() * 10000);
+      const continued = await interruptibleSleep(backoff, `Nova tentativa de ${item.slug}.json em`);
+      if (!continued) return { paused: true };
+    }
+  }
+  return { ok: false };
+}
+
+async function runQueue(onlyErrors = false) {
+  if (running) return;
+  const settings = readSettings();
+  saveSettings();
+  const candidates = SOURCES.filter((item) => onlyErrors
+    ? state.statuses[item.slug] === 'error'
+    : state.statuses[item.slug] !== 'done');
+  if (!candidates.length) {
+    els.runStatus.textContent = 'Não há arquivos pendentes para esta operação.';
+    log('Nenhum arquivo pendente.', 'ok');
+    return;
+  }
+  if (!directoryHandle) {
+    log('Nenhuma pasta selecionada. O navegador usará downloads individuais.', 'warn');
+  }
+  activeQueue = buildQueue(candidates, settings.balanceHosts);
+  running = true;
+  pauseRequested = false;
+  els.runStatus.textContent = `Iniciando fila com ${activeQueue.length} arquivos.`;
+  updateUI();
+  let processedInBatch = 0;
+  try {
+    for (let index = 0; index < activeQueue.length; index++) {
+      if (pauseRequested) break;
+      const item = activeQueue[index];
+      els.runStatus.textContent = `Arquivo ${index + 1} de ${activeQueue.length}: ${item.slug}.json`;
+      const result = await downloadOne(item, settings);
+      updateUI();
+      if (result.paused || pauseRequested) break;
+      processedInBatch++;
+      const hasNext = index < activeQueue.length - 1;
+      if (hasNext && processedInBatch >= settings.batchSize) {
+        processedInBatch = 0;
+        const continued = await interruptibleSleep(settings.batchPause * 1000, 'Pausa preventiva entre lotes:');
+        if (!continued) break;
+      } else if (hasNext) {
+        const continued = await interruptibleSleep(randomDelayMs(settings), 'Próximo arquivo em');
+        if (!continued) break;
+      }
+    }
+  } finally {
+    for (const [slug, status] of Object.entries(state.statuses)) {
+      if (status === 'working') delete state.statuses[slug];
+    }
+    saveState();
+    running = false;
+    const completed = SOURCES.filter((x) => state.statuses[x.slug] === 'done').length;
+    const failed = SOURCES.filter((x) => state.statuses[x.slug] === 'error').length;
+    if (pauseRequested) {
+      els.runStatus.textContent = 'Fila pausada. Clique em “Iniciar ou continuar” para retomar.';
+      log('Fila pausada.', 'warn');
+    } else {
+      els.runStatus.textContent = `Fila encerrada: ${completed} concluídos e ${failed} erros.`;
+      log(`Fila encerrada: ${completed} concluídos e ${failed} erros.`, failed ? 'warn' : 'ok');
+    }
+    updateUI();
+  }
+}
+
+function pauseRun() {
+  if (!running) return;
+  pauseRequested = true;
+  els.runStatus.textContent = 'Pausa solicitada; encerrando a operação atual com segurança.';
+  log('Pausa solicitada.', 'warn');
+}
+
+function resetProgress() {
+  const confirmed = window.confirm('Apagar todo o progresso salvo nesta página? Os arquivos já gravados no computador não serão removidos.');
+  if (!confirmed) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = { statuses: {}, errors: {}, updatedAt: null };
+  els.log.textContent = '';
+  els.runStatus.textContent = 'Progresso local apagado.';
+  log('Progresso local apagado.', 'warn');
+  updateUI();
+}
+
+els.chooseFolder.addEventListener('click', chooseDirectory);
+els.start.addEventListener('click', () => runQueue(false));
+els.pause.addEventListener('click', pauseRun);
+els.retry.addEventListener('click', () => runQueue(true));
+els.reset.addEventListener('click', resetProgress);
+for (const element of [els.minDelay, els.maxDelay, els.batchSize, els.batchPause, els.maxRetries, els.timeout, els.balanceHosts, els.validateJson]) {
+  element.addEventListener('change', saveSettings);
+}
+
+restoreSettings();
+renderRows();
+updateUI();
+log(`Página carregada com ${SOURCES.length} fontes e versão ${DATA_VERSION}.`);
+</script>
 </body>
 </html>
