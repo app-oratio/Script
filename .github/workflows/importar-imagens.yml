@@ -1,0 +1,113 @@
+name: Importar imagens do Oratio
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: "Branch-base"
+        required: true
+        default: "main"
+        type: string
+      allow_overwrite:
+        description: "Autorizar substituição de imagens existentes diferentes"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: importar-imagens-oratio
+  cancel-in-progress: false
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Baixar ferramenta
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: python -m pip install --disable-pip-version-check requests pillow
+
+      - name: Validar segredo
+        env:
+          ORATIO_TOKEN: ${{ secrets.ORATIO_TOKEN }}
+        run: |
+          if [ -z "$ORATIO_TOKEN" ]; then
+            echo "O segredo ORATIO_TOKEN não foi configurado neste repositório." >&2
+            exit 1
+          fi
+
+      - name: Clonar Oratio sem expor o token
+        env:
+          ORATIO_TOKEN: ${{ secrets.ORATIO_TOKEN }}
+          TARGET: "app-oratio/Oratio"
+          BASE_BRANCH: ${{ inputs.base_branch }}
+        run: |
+          AUTH=$(printf 'x-access-token:%s' "$ORATIO_TOKEN" | base64 -w0)
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" \
+            clone --depth 1 --branch "$BASE_BRANCH" "https://github.com/$TARGET.git" target
+
+      - name: Baixar e validar imagens
+        run: |
+          ARGS=(--csv data/imagens.csv --repo target --report RELATORIO_IMPORTACAO_IMAGENS.txt)
+          if [ "${{ inputs.allow_overwrite }}" = "true" ]; then
+            ARGS+=(--allow-overwrite)
+          fi
+          python scripts/importar_imagens.py "${ARGS[@]}"
+
+      - name: Criar branch e commit
+        id: commit
+        working-directory: target
+        env:
+          TARGET: "app-oratio/Oratio"
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          ORATIO_TOKEN: ${{ secrets.ORATIO_TOKEN }}
+        run: |
+          git config user.name "Oratio Image Importer"
+          git config user.email "actions@users.noreply.github.com"
+          git add assets/images
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BRANCH="importar-imagens-$(date -u +%Y%m%d%H%M%S)"
+          git switch -c "$BRANCH"
+          git commit -m "Adiciona imagens dos conteúdos devocionais"
+          AUTH=$(printf 'x-access-token:%s' "$ORATIO_TOKEN" | base64 -w0)
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" push origin "$BRANCH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Criar Pull Request
+        if: steps.commit.outputs.changed == 'true'
+        working-directory: target
+        env:
+          GH_TOKEN: ${{ secrets.ORATIO_TOKEN }}
+          TARGET: "app-oratio/Oratio"
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+        run: |
+          gh pr create \
+            --repo "$TARGET" \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "Adiciona imagens dos conteúdos devocionais" \
+            --body "Importação automática das imagens listadas no inventário IMC. Nenhum arquivo foi excluído e a branch principal não foi alterada diretamente."
+
+      - name: Publicar relatório como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-importacao-imagens
+          path: RELATORIO_IMPORTACAO_IMAGENS.txt
+          if-no-files-found: ignore
+          retention-days: 14
